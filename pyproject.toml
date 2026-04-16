@@ -1,0 +1,50 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "hallucipip"
+version = "0.1.0"
+description = "LLM-backed synthetic compatibility modules generated on import."
+readme = "README.md"
+requires-python = ">=3.9"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "Zander Mackie" }]
+keywords = ["llm", "import-hook", "prototyping", "developer-tools", "compatibility"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Topic :: Software Development :: Libraries",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: Software Development",
+]
+dependencies = [
+    "openai>=1.0",
+    "rich>=13.0",
+    "click>=8.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/zmackie/hallucipip"
+Repository = "https://github.com/zmackie/hallucipip"
+Issues = "https://github.com/zmackie/hallucipip/issues"
+
+[project.optional-dependencies]
+dev = ["build>=1.2.2", "pytest>=8.0", "ruff>=0.11.0"]
+
+[project.scripts]
+hallucipip = "hallucipip.cli:cli"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+target-version = "py39"
+line-length = 100
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/hallucipip"]
