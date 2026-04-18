@@ -4,14 +4,21 @@ build-backend = "hatchling.build"
 
 [project]
 name = "hallucipip"
-version = "0.1.0"
-description = "LLM-backed synthetic compatibility modules generated on import."
+version = "0.2.0"
+description = "Supply-chain security is hard. Have one dependency and hallucinate the rest."
 readme = "README.md"
 requires-python = ">=3.9"
 license = "MIT"
 license-files = ["LICENSE"]
 authors = [{ name = "Zander Mackie" }]
-keywords = ["llm", "import-hook", "prototyping", "developer-tools", "compatibility"]
+keywords = [
+    "llm",
+    "import-hook",
+    "supply-chain",
+    "prototyping",
+    "developer-tools",
+    "satire",
+]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
@@ -24,8 +31,6 @@ classifiers = [
 ]
 dependencies = [
     "openai>=1.0",
-    "rich>=13.0",
-    "click>=8.0",
 ]
 
 [project.urls]
@@ -37,7 +42,7 @@ Issues = "https://github.com/zmackie/hallucipip/issues"
 dev = ["build>=1.2.2", "pytest>=8.0", "ruff>=0.11.0"]
 
 [project.scripts]
-hallucipip = "hallucipip.cli:cli"
+hallucipip = "hallucipip.cli:main"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

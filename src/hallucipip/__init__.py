@@ -11,7 +11,7 @@ import os
 import sys
 from typing import Any
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
 log = logging.getLogger("hallucipip")
 
@@ -103,14 +103,13 @@ def get_config() -> dict[str, Any]:
 
 def _install_hook() -> None:
     """Insert our finder into sys.meta_path if it's not already there."""
-    # Pre-import the entire LLM + display dependency chain BEFORE the hook is
-    # active.  openai lazily imports httpcore, so we force the full chain here
-    # to ensure httpcore's optional deps (trio, h2, socksio) resolve through
-    # the normal import system and don't get intercepted by our hook.
+    # Pre-import the entire LLM dependency chain BEFORE the hook is active.
+    # openai lazily imports httpcore, so we force the full chain here to
+    # ensure httpcore's optional deps (trio, h2, socksio) resolve through the
+    # normal import system and don't get intercepted by our hook.
     import httpcore  # noqa: F401
     import httpx  # noqa: F401
     import openai  # noqa: F401
-    import rich  # noqa: F401
 
     from hallucipip.finder import HallucipipFinder
 

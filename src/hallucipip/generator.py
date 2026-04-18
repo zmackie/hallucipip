@@ -2,8 +2,12 @@
 
 from __future__ import annotations
 
+import itertools
 import logging
 import re
+import sys
+import threading
+import time
 
 from hallucipip.prompts import SYSTEM_PROMPT, build_user_prompt
 
@@ -17,6 +21,42 @@ def _strip_markdown_fences(text: str) -> str:
     if match:
         return match.group(1).strip()
     return text.strip()
+
+
+class _StderrSpinner:
+    """Tiny stdlib-only spinner that writes to stderr while work is happening."""
+
+    _FRAMES = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
+
+    def __init__(self, text: str) -> None:
+        self._text = text
+        self._stop = threading.Event()
+        self._thread: threading.Thread | None = None
+        self._enabled = sys.stderr.isatty()
+
+    def __enter__(self) -> "_StderrSpinner":
+        if self._enabled:
+            self._thread = threading.Thread(target=self._run, daemon=True)
+            self._thread.start()
+        else:
+            print(self._text, file=sys.stderr, flush=True)
+        return self
+
+    def __exit__(self, _exc_type, _exc, _tb) -> None:
+        self._stop.set()
+        if self._thread is not None:
+            self._thread.join(timeout=0.5)
+        if self._enabled:
+            sys.stderr.write("\r\x1b[2K")
+            sys.stderr.flush()
+
+    def _run(self) -> None:
+        for frame in itertools.cycle(self._FRAMES):
+            if self._stop.is_set():
+                return
+            sys.stderr.write(f"\r{frame} {self._text}")
+            sys.stderr.flush()
+            time.sleep(0.08)
 
 
 def generate_module(
@@ -37,15 +77,11 @@ def generate_module(
             "OPENAI_API_KEY, or pass api_key=... to hallucipip.configure()."
         )
 
-    # Lazy imports — these must not be imported at hook-install time because
-    # loading openai triggers httpcore which tries optional imports (trio, h2,
-    # socksio) that would hit our hook before the HTTP stack is ready.
+    # Lazy import — loading openai triggers httpcore, which probes optional
+    # deps (trio, h2, socksio). Doing it here keeps the import-time surface of
+    # hallucipip itself minimal.
     from openai import OpenAI
-    from rich.console import Console
-    from rich.spinner import Spinner
-    from rich.live import Live
 
-    console = Console(stderr=True)
     client = OpenAI(api_key=api_key, base_url=base_url)
 
     user_prompt = build_user_prompt(module_name, version_hint, hallucination_intensity)
@@ -62,11 +98,7 @@ def generate_module(
         },
     )
 
-    with Live(
-        Spinner("dots", text=f"[bold cyan]Hallucinating {module_name}...[/]"),
-        console=console,
-        transient=True,
-    ):
+    with _StderrSpinner(f"Hallucinating {module_name}..."):
         response = client.chat.completions.create(
             model=model,
             messages=[

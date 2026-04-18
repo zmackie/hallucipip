@@ -4,55 +4,43 @@
   <img src="https://raw.githubusercontent.com/zmackie/hallucipip/main/logo.png" alt="hallucipip logo" width="520">
 </p>
 
-`hallucipip` is an experimental Python package that synthesizes missing modules with an LLM at import time, caches the generated source locally, and then loads that cached file as a normal Python module.
+<p align="center"><em>Supply-chain security is hard. Have one dependency and hallucinate the rest.</em></p>
 
-This is still a joke-adjacent project, but the underlying mechanism is real and useful enough to describe plainly: it is a lightweight import hook for rapid prototyping, compatibility experiments, demos, and intentionally fake dependencies.
+---
 
-## What it does
+`hallucipip` ships with exactly **one** runtime dependency — an LLM client. Every other module you `import` is generated on demand by an LLM, written to disk as a plain `.py` file, and loaded through Python's normal import machinery.
 
-- Intercepts imports for modules that are not installed locally.
-- Generates a synthetic implementation by calling an LLM through the OpenAI-compatible API.
-- Writes the generated module into a local cache directory.
-- Imports the cached file through Python's normal module loader on subsequent runs.
+It is a joke. The mechanism is real.
 
-In other words, `hallucipip` treats a missing dependency as a code-generation request instead of an installation failure.
+## The premise
 
-## Why this exists
+Modern Python projects routinely pull in hundreds of transitive dependencies, any one of which can own your supply chain. `hallucipip` asks: what if you just didn't install them? What if, at import time, we generated the module ourselves?
 
-There are two plausible use cases:
+Every hallucinated module is:
 
-1. Prototype-first development where you want a fake module quickly and you are comfortable with rough edges.
-2. Developer tooling experiments around import hooks, synthetic packages, and LLM-generated compatibility shims.
+- Generated from a prompt, not fetched from PyPI.
+- Cached locally as a plain Python file you can read.
+- Uniquely yours — different API key, different model, different code.
 
-It is not a substitute for real package management, reproducible builds, or audited dependencies.
+The blast radius of a compromised dependency is zero, because the dependency does not exist.
+
+The blast radius of a bad hallucination is, admittedly, non-zero.
 
 ## How it works
 
-The core logic is intentionally simple:
+1. `import hallucipip` installs a `MetaPathFinder` into `sys.meta_path`.
+2. When Python tries to import a top-level module that isn't stdlib and isn't installed, the finder takes over.
+3. The finder computes a request signature from the module name, model, version hint, and prompt.
+4. If a matching file exists in `~/.hallucipip/cache`, it's loaded immediately.
+5. Otherwise an LLM is asked to produce a single-file implementation with no third-party imports, the result is written to the cache, and Python loads it normally.
 
-1. Importing `hallucipip` installs a `MetaPathFinder` into `sys.meta_path`.
-2. When Python tries to import a top-level module that is not already installed or part of the standard library, the finder takes over.
-3. The finder computes a request signature from the module name, target model, version hint, and generation prompt.
-4. If a matching cached file already exists in `~/.hallucipip/cache` (or your configured cache directory), that file is loaded immediately.
-5. Otherwise `hallucipip` prompts an LLM to generate a single-file Python implementation with no third-party dependencies.
-6. The generated file is written to the cache and imported through `importlib.util.spec_from_file_location`.
-
-That design keeps the first implementation narrow and inspectable:
-
-- No build backend tricks.
-- No binary artifacts.
-- No hidden daemon or service process.
-- Just import interception, generation, caching, and normal Python module loading.
+The generated code is just a `.py` file. You can `cat` it. You can edit it. You can check it into version control if you hate yourself.
 
 ## Installation
 
 ```bash
 uv pip install hallucipip
-```
-
-Or with `pip`:
-
-```bash
+# or
 pip install hallucipip
 ```
 
@@ -62,63 +50,76 @@ pip install hallucipip
 import hallucipip
 
 hallucipip.configure(
-    model="anthropic/claude-3.7-sonnet",
-    api_key="...",
+    model="anthropic/claude-sonnet-4.5",
+    api_key="...",            # or set OPENROUTER_API_KEY
     hallucination_intensity=4,
     debug=True,
 )
 
-import fake_math_lib
-
+import fake_math_lib          # does not exist on PyPI
 print(fake_math_lib.__version__)
 print(fake_math_lib.add(2, 3))
 ```
 
-You can also provide configuration through environment variables:
+The first import takes an LLM call. Every subsequent import is a disk read.
 
-- `HALLUCIPIP_MODEL`
-- `HALLUCIPIP_BASE_URL`
-- `HALLUCIPIP_TEMPERATURE`
-- `HALLUCIPIP_MAX_TOKENS`
-- `HALLUCIPIP_INTENSITY`
-- `HALLUCIPIP_CACHE_DIR`
-- `HALLUCIPIP_DEBUG`
-- `OPENROUTER_API_KEY`
-- `ANTHROPIC_API_KEY`
-- `OPENAI_API_KEY`
+## Configuration
+
+All of these can be set as env vars or passed to `hallucipip.configure()`:
+
+| Env var | Purpose | Default |
+| --- | --- | --- |
+| `HALLUCIPIP_MODEL` | Model slug | `anthropic/claude-3.7-sonnet` |
+| `HALLUCIPIP_BASE_URL` | OpenAI-compatible endpoint | `https://openrouter.ai/api/v1` |
+| `HALLUCIPIP_TEMPERATURE` | Sampling temperature | `0.7` |
+| `HALLUCIPIP_MAX_TOKENS` | Generation cap | `8000` |
+| `HALLUCIPIP_INTENSITY` | `1` (conservative) – `10` (unhinged) | `5` |
+| `HALLUCIPIP_CACHE_DIR` | Where cached modules live | `~/.hallucipip/cache` |
+| `HALLUCIPIP_DEBUG` | Verbose logging | `false` |
+| `OPENROUTER_API_KEY` / `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` | Whichever you have | — |
 
 ## Version hints
 
-If you want the generator to aim at a particular public API shape, add an inline import comment:
+If you want the generator to aim at a particular public API shape, drop an inline comment:
 
 ```python
 import imaginary_numpy  # hallucipip: imaginary_numpy>=2.0,<3
 ```
 
-The hint becomes part of the generation request and the cache signature, so different compatibility targets do not overwrite each other.
+The hint becomes part of the generation request and the cache signature, so different compatibility targets don't overwrite each other.
 
 ## CLI
 
 ```bash
-hallucipip config
-hallucipip cache list
-hallucipip cache clear
+hallucipip config           # show active configuration
+hallucipip cache list       # list cached hallucinations
+hallucipip cache clear      # wipe cache — next import re-hallucinates
+hallucipip --debug ...      # structured logs on stderr
 ```
 
-Use `--debug` to enable structured logs on stderr.
+## Dependencies
 
-## Operational notes
+One. `openai` — used as a thin OpenAI-compatible HTTP client so you can point at OpenRouter, Anthropic, OpenAI, or your own endpoint. The CLI uses `argparse`. Pretty output uses `print`. There is no `rich`, no `click`, no `requests`, no `pydantic`.
 
-- Cached modules are plain `.py` files, so you can inspect exactly what was generated.
-- The cache key is derived from the actual generation request, not just the module name, which makes cache reuse more predictable.
-- The package only handles missing top-level imports in this first release. Deep package emulation is intentionally out of scope for now.
+If `openai` itself offends you philosophically, the joke lands harder.
+
+## What this is not
+
+- A substitute for real package management.
+- A substitute for reproducible builds.
+- A substitute for audited dependencies.
+- Safe.
+- Deterministic.
+- A good idea.
+
+It is a useful import hook for prototyping, demos, compatibility experiments, and the occasional cursed notebook.
 
 ## Limitations
 
-- Generated modules are not trustworthy by default.
-- Behavior may drift across models or prompt changes.
-- Non-trivial libraries with large extension surfaces will only get partial compatibility.
-- This project has not been designed for security-sensitive or production-critical environments.
+- Generated code is not trustworthy by default. Read it before you trust it.
+- Behavior drifts across models and prompts.
+- Only top-level imports are handled right now. Deep package emulation is out of scope.
+- Non-trivial libraries with large C-extension surfaces will only get partial compatibility.
 
 ## Development
 
@@ -129,15 +130,6 @@ uv run python -m build
 ```
 
 ## Publishing
-
-The repository is structured for a standard PyPI release:
-
-- `pyproject.toml` uses Hatchling.
-- The package follows the `src/` layout.
-- The README is PyPI-friendly.
-- Wheel and sdist builds can be produced with `python -m build`.
-
-When you are ready to publish:
 
 ```bash
 uv run python -m build
