@@ -1,4 +1,4 @@
-# hallucipip
+# hallucipip: NOT SAFE. USE AT YOUR OWN RISK. YOU HAVE BEEN WARNED!
 
 <p align="center">
   <img src="https://raw.githubusercontent.com/zmackie/hallucipip/main/logo.png" alt="hallucipip logo" width="520">
